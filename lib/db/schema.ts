@@ -52,5 +52,35 @@ export const interactions = pgTable(
   ]
 );
 
+// Per-turn usage reported by a developer's local agent (the statusline). The
+// water/energy is computed locally and POSTed here so it's stored under the
+// dev's GitHub login — independent of whether traffic flows through the gateway.
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text("id").primaryKey(),
+    authorLogin: text("author_login")
+      .notNull()
+      .references(() => users.githubLogin),
+    repoId: text("repo_id").notNull(),
+    tokens: integer("tokens").notNull(),
+    waterL: doublePrecision("water_l").notNull().default(0),
+    energyKwh: doublePrecision("energy_kwh").notNull().default(0),
+    co2G: doublePrecision("co2_g").notNull().default(0),
+    model: text("model"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("idx_usage_author_repo_created").on(
+      t.authorLogin,
+      t.repoId,
+      t.createdAt
+    ),
+  ]
+);
+
 export type User = typeof users.$inferSelect;
 export type Interaction = typeof interactions.$inferSelect;
+export type UsageEventRow = typeof usageEvents.$inferSelect;

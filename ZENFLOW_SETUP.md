@@ -50,3 +50,35 @@ Committing a base URL reroutes every contributor's Claude Code traffic — their
 prompts and their API credentials pass through your gateway (which forwards
 them upstream with the user's own key). Fine for a known team; think twice for a
 public or cross-org repo, and tell contributors.
+
+## C. Statusline water + usage reporting (no gateway routing needed)
+
+The statusline computes each turn's water/energy **locally** from Claude Code's
+token counts and (optionally) reports it to the deployment, stored under your
+GitHub login — so you get per-repo usage on the dashboard **without** routing
+model traffic through the gateway (layer B).
+
+Add to `~/.claude/settings.json` (works in every repo). Display-only:
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/ABS/carbo/node_modules/.bin/tsx /ABS/carbo/adapters/claude-statusline.ts"
+  }
+}
+```
+To also report usage to the server, set two env vars on the command (and the
+secret if the server sets `CARBO_INGEST_SECRET`):
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "CARBO_INGEST_URL=https://your-app.vercel.app CARBO_AUTHOR=razzyshmazzy /ABS/carbo/node_modules/.bin/tsx /ABS/carbo/adapters/claude-statusline.ts"
+  }
+}
+```
+- The repo id is taken automatically from `workspace.repo` each turn.
+- Reporting is **deduped per turn** (one POST per assistant message) and
+  **fire-and-forget** (detached `curl`) — it never delays the status bar.
+- Server side: run `npm run db:push` once so the `usage_events` table exists;
+  view your data at `GET /api/me/usage` (after signing in as the same login).

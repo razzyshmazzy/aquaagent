@@ -17,6 +17,10 @@
 // Schema ref: https://code.claude.com/docs/en/statusline — token counts live
 // under `context_window.*`, NOT at the top level.
 
+import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tokensToKwh, WATER_L_PER_KWH } from "../lib/sustainability";
 
 const BLUE = "\x1b[34m";
@@ -31,6 +35,12 @@ function osc8(text: string, url: string): string {
 }
 
 type StatusInput = {
+  session_id?: string;
+  model?: { id?: string; display_name?: string };
+  workspace?: {
+    current_dir?: string;
+    repo?: { owner?: string; name?: string };
+  };
   context_window?: {
     total_output_tokens?: number;
     total_input_tokens?: number;
@@ -70,20 +80,75 @@ function render(input: StatusInput): string {
   return `${waterStr} ${energyStr} ${link}`;
 }
 
+function repoId(input: StatusInput): string {
+  const r = input.workspace?.repo;
+  if (r?.owner && r?.name) return `${r.owner}/${r.name}`;
+  const dir = input.workspace?.current_dir;
+  if (dir) return dir.split("/").filter(Boolean).pop() || "local";
+  return "local";
+}
+
+// Fire-and-forget: report this turn's usage to the gateway deployment, stored
+// under the dev's GitHub login. Deduped per session by token count so the many
+// statusline ticks per turn (compact, permission changes, …) report only once.
+// Enabled by env on the statusLine command: CARBO_INGEST_URL + CARBO_AUTHOR
+// (+ optional CARBO_INGEST_SECRET). Disabled (display-only) when unset.
+function maybeReport(input: StatusInput): void {
+  const url = process.env.CARBO_INGEST_URL;
+  const author = process.env.CARBO_AUTHOR;
+  if (!url || !author) return;
+
+  const tokens = latestOutputTokens(input);
+  if (tokens <= 0) return;
+
+  const sid = (input.session_id ?? "default").replace(/[^a-zA-Z0-9_-]/g, "");
+  const statePath = join(tmpdir(), `carbo-report-${sid}.json`);
+  try {
+    const prev = JSON.parse(readFileSync(statePath, "utf8")) as { tokens?: number };
+    if (prev?.tokens === tokens) return; // same turn — already reported
+  } catch {
+    // no prior state — fall through and report
+  }
+  try {
+    writeFileSync(statePath, JSON.stringify({ tokens }));
+  } catch {
+    // can't persist dedup state — still report once
+  }
+
+  const payload = JSON.stringify({
+    author,
+    repo: repoId(input),
+    tokens,
+    model: input.model?.id ?? null,
+  });
+  const args = ["-s", "-m", "3", "-X", "POST", "-H", "content-type: application/json"];
+  const secret = process.env.CARBO_INGEST_SECRET;
+  if (secret) args.push("-H", `x-carbo-ingest-secret: ${secret}`);
+  args.push("-d", payload, `${url.replace(/\/+$/, "")}/api/usage`);
+
+  try {
+    spawn("curl", args, { detached: true, stdio: "ignore" }).unref();
+  } catch {
+    // curl unavailable — skip reporting, never break the status bar
+  }
+}
+
 async function main() {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
   const raw = Buffer.concat(chunks).toString("utf8").trim();
 
-  let line = `${BLUE}💧0L${RESET} ${YELLOW}⚡0Wh${RESET}`;
+  let input: StatusInput = {};
   if (raw) {
     try {
-      line = render(JSON.parse(raw) as StatusInput);
+      input = JSON.parse(raw) as StatusInput;
     } catch {
-      // Malformed input — keep the zero line rather than crashing the status bar.
+      // Malformed input — render the zero line rather than crashing the bar.
     }
   }
-  process.stdout.write(line + "\n");
+
+  process.stdout.write(render(input) + "\n"); // display first (instant)
+  maybeReport(input); // then report (deduped, detached, non-blocking)
 }
 
 main();

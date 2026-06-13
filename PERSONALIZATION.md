@@ -41,6 +41,17 @@ Postgres is the queryable, attributed history alongside them.
 | `GET /api/me/repos` | `[{ repoId, count, waterSavedL, energySavedKwh }]` — distinct repos with totals |
 | `GET /api/me/sessions?repo=<id>` | `[{ id, prompt (≤140), cacheHit, waterSavedL, energySavedKwh, model, createdAt }]` newest first |
 | `GET /api/me/savings` | `{ totalWaterSavedL, totalEnergySavedKwh, count, items: [{ id, prompt, waterSavedL, energySavedKwh, matchedFrom: { author, prompt } \| null, createdAt }] }` — only cache-hit rows with water saved |
+| `GET /api/me/usage` | `{ totals, repos: [{ repoId, turns, tokens, waterL, energyKwh, co2G }] }` — locally-reported per-turn usage, totaled per repo |
+
+## Local usage reporting (no gateway routing)
+
+`POST /api/usage` ingests per-turn usage computed locally by the statusline
+(`{ author, repo, tokens, model? }`), stored under `author` in the `usage_events`
+table — kept separate from the gateway's cache-savings metrics so it never skews
+the cache-hit rate. Optional shared secret via `CARBO_INGEST_SECRET` +
+`x-carbo-ingest-secret` header. See `ZENFLOW_SETUP.md` §C for the statusline
+config that drives it. (Author is taken on trust — add per-user ingest tokens
+before exposing publicly.)
 
 ## Acceptance check
 

@@ -9,8 +9,13 @@
  */
 import { randomUUID } from "node:crypto";
 import { getDb } from "../lib/db";
-import { users, interactions } from "../lib/db/schema";
-import { computeSustainability } from "../lib/sustainability";
+import { users, interactions, usageEvents } from "../lib/db/schema";
+import {
+  computeSustainability,
+  tokensToKwh,
+  WATER_L_PER_KWH,
+  CO2_G_PER_KWH,
+} from "../lib/sustainability";
 
 type Row = {
   id: string;
@@ -29,6 +34,7 @@ async function main() {
   const db = getDb();
 
   // Clean slate so the demo data is predictable.
+  await db.delete(usageEvents);
   await db.delete(interactions);
   await db.delete(users);
 
@@ -129,9 +135,33 @@ async function main() {
     });
   }
 
-  console.log(`✓ seeded ${SEED_USERS.length} users, ${rows.length} interactions`);
-  console.log("  alice: 3 interactions across acme/web + acme/api (2 hits)");
-  console.log("  bob:   2 interactions in acme/api");
+  // Locally-reported per-turn usage (statusline ingest), per user + repo.
+  const usage: { author: string; repo: string; tokens: number; ageMin: number }[] = [
+    { author: "alice", repo: "acme/web", tokens: 820, ageMin: 50 },
+    { author: "alice", repo: "acme/web", tokens: 1340, ageMin: 40 },
+    { author: "alice", repo: "acme/api", tokens: 610, ageMin: 25 },
+    { author: "bob", repo: "acme/api", tokens: 990, ageMin: 35 },
+  ];
+  for (const u of usage) {
+    const kwh = tokensToKwh(u.tokens);
+    await db.insert(usageEvents).values({
+      id: randomUUID(),
+      authorLogin: u.author,
+      repoId: u.repo,
+      tokens: u.tokens,
+      waterL: kwh * WATER_L_PER_KWH,
+      energyKwh: kwh,
+      co2G: kwh * CO2_G_PER_KWH,
+      model: "claude-opus-4-8",
+      createdAt: new Date(Date.now() - u.ageMin * 60_000),
+    });
+  }
+
+  console.log(
+    `✓ seeded ${SEED_USERS.length} users, ${rows.length} interactions, ${usage.length} usage events`
+  );
+  console.log("  alice: 3 interactions + usage across acme/web + acme/api");
+  console.log("  bob:   data in acme/api (alice must never see it)");
 }
 
 main().catch((err) => {

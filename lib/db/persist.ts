@@ -1,6 +1,11 @@
 import { getDb } from "./index";
-import { users, interactions } from "./schema";
-import { computeSustainability } from "@/lib/sustainability";
+import { users, interactions, usageEvents } from "./schema";
+import {
+  computeSustainability,
+  tokensToKwh,
+  WATER_L_PER_KWH,
+  CO2_G_PER_KWH,
+} from "@/lib/sustainability";
 
 export type PersistInput = {
   id: string;
@@ -46,6 +51,38 @@ export async function persistInteraction(input: PersistInput): Promise<void> {
     energySavedKwh: s.energySavedKwh,
     co2SavedG: s.co2SavedG,
     matchedInteractionId: input.matchedInteractionId,
+  });
+}
+
+export type UsageReport = {
+  id: string;
+  author: string; // GitHub login
+  repo: string;
+  tokens: number;
+  model?: string | null;
+};
+
+// Record one locally-computed usage report (from the statusline), attributed to
+// the developer's GitHub login. Kept separate from the gateway's cache-savings
+// metrics so it never skews the cache-hit rate.
+export async function recordUsageEvent(r: UsageReport): Promise<void> {
+  const db = getDb();
+  const kwh = tokensToKwh(r.tokens);
+
+  await db
+    .insert(users)
+    .values({ githubLogin: r.author })
+    .onConflictDoNothing();
+
+  await db.insert(usageEvents).values({
+    id: r.id,
+    authorLogin: r.author,
+    repoId: r.repo,
+    tokens: r.tokens,
+    waterL: kwh * WATER_L_PER_KWH,
+    energyKwh: kwh,
+    co2G: kwh * CO2_G_PER_KWH,
+    model: r.model ?? null,
   });
 }
 
