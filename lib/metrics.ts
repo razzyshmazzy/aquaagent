@@ -1,109 +1,105 @@
 import { redis } from "./clients";
+import { computeSustainability } from "./sustainability";
 
-// =============================================================================
-// METRICS — OWNED BY THE METRICS DEV (branch off main). See WhenBranched.md.
-//
-// The integration boundary is two functions and two shapes:
-//   - recordUsage(e: UsageEvent)  — /api/ask calls this on EVERY ask.
-//   - getMetrics(): Promise<Metrics> — /api/metrics and /api/ask read this.
-// Keep those signatures stable; everything inside is yours to tune.
-// =============================================================================
-
-// --- Sustainability estimates (tune these; keep them cited) ------------------
-// Energy per 1k tokens of inference. ~0.3 Wh/1k tokens is an order-of-magnitude
-// estimate for a small hosted model (cf. Luccioni et al. 2024).
-const WH_PER_1K_TOKENS = 0.3;
-// Datacenter water usage effectiveness incl. power generation. ~1.8 L/kWh.
-const WATER_L_PER_KWH = 1.8;
-// Grid carbon intensity (region-dependent). ~400 gCO2/kWh for a mixed grid.
-const CO2_G_PER_KWH = 400;
-
-// --- Frozen contract: the usage event /api/ask produces ----------------------
+// Frozen contract — Nico's gateway calls recordUsage(e) on every cacheable request.
+// Never rename these fields.
 export type UsageEvent = {
-  cacheHit: boolean; // true = work avoided (reuse)
-  tokens: number; // answer tokens — "saved" if hit, "spent" if miss
-  model: string; // e.g. "gpt-4o-mini"
+  cacheHit: boolean;
+  tokens: number; // tokens saved (hit) or spent (miss)
+  model: string;
   author: string;
   ts: number; // epoch ms
 };
 
-// The /api/metrics contract shape (also embedded in /api/ask responses).
+// GET /api/metrics response shape. Expand freely; the gateway never reads it.
 export type Metrics = {
   requests: number;
   promptsAvoided: number;
-  cacheHitRate: number; // 0..1
+  cacheHitRate: number;
   tokensSaved: number;
-  energyKwh: number;
-  waterL: number;
-  co2g: number;
-  ecoScore: number; // 0..100
+  tokensSpent: number;
+  energySavedKwh: number;
+  energySpentKwh: number;
+  waterSavedL: number;
+  waterSpentL: number;
+  co2SavedG: number;
+  ecoScore: number;
+  latest: UsageEvent | null;
 };
 
-// Redis counter keys. Only three are stored; everything else is derived on read.
-const KEYS = {
-  requests: "carbo:requests", // total /api/ask calls
-  hits: "carbo:hits", // cache hits === promptsAvoided
-  tokensSaved: "carbo:tokensSaved", // generation tokens avoided by hits
+const K = {
+  requests: "carbo:requests",
+  hits: "carbo:hits",
+  tokensSaved: "carbo:tokensSaved",
+  tokensSpent: "carbo:tokensSpent",
+  latest: "carbo:latest",
 } as const;
 
-// Called on every ask. Bumps requests; on a hit also bumps promptsAvoided and
-// the tokens saved by reuse.
 export async function recordUsage(e: UsageEvent): Promise<void> {
-  const pipe = redis.pipeline();
-  pipe.incr(KEYS.requests);
+  const p = redis.pipeline();
+  p.incr(K.requests);
   if (e.cacheHit) {
-    pipe.incr(KEYS.hits);
-    if (e.tokens > 0) pipe.incrby(KEYS.tokensSaved, e.tokens);
+    p.incr(K.hits);
+    if (e.tokens > 0) p.incrby(K.tokensSaved, e.tokens);
+  } else {
+    if (e.tokens > 0) p.incrby(K.tokensSpent, e.tokens);
   }
-  await pipe.exec();
+  p.set(K.latest, JSON.stringify(e));
+  await p.exec();
 }
 
-// Read counters and compute the full derived metrics object.
 export async function getMetrics(): Promise<Metrics> {
-  const [requests, hits, tokensSaved] = await Promise.all([
-    redis.get<number>(KEYS.requests),
-    redis.get<number>(KEYS.hits),
-    redis.get<number>(KEYS.tokensSaved),
+  const [requests, hits, tokensSaved, tokensSpent, latestRaw] = await Promise.all([
+    redis.get<number>(K.requests),
+    redis.get<number>(K.hits),
+    redis.get<number>(K.tokensSaved),
+    redis.get<number>(K.tokensSpent),
+    redis.get<string>(K.latest),
   ]);
-  return computeMetrics(requests ?? 0, hits ?? 0, tokensSaved ?? 0);
+
+  const latest = latestRaw ? (JSON.parse(latestRaw) as UsageEvent) : null;
+  return computeMetrics(
+    requests ?? 0,
+    hits ?? 0,
+    tokensSaved ?? 0,
+    tokensSpent ?? 0,
+    latest
+  );
 }
 
-// Pure derivation — easy to unit test and tune.
 export function computeMetrics(
   requests: number,
   hits: number,
-  tokensSaved: number
+  tokensSaved: number,
+  tokensSpent: number,
+  latest: UsageEvent | null = null
 ): Metrics {
   const cacheHitRate = requests === 0 ? 0 : hits / requests;
-
-  // tokensSaved -> Wh -> kWh, then water and CO2 from the saved energy.
-  const energyKwh = ((tokensSaved / 1000) * WH_PER_1K_TOKENS) / 1000;
-  const waterL = energyKwh * WATER_L_PER_KWH;
-  const co2g = energyKwh * CO2_G_PER_KWH;
-
-  // Eco score: a saturating reward for cache hit rate so modest reuse still
-  // reads well on the dashboard. 0 when nothing's happened yet. Tunable.
-  const ecoScore =
-    requests === 0 ? 0 : Math.round(100 * Math.sqrt(cacheHitRate));
+  // Saturating reward — 50% hit rate → 71 score, 75% → 87, 100% → 100.
+  const ecoScore = requests === 0 ? 0 : Math.round(100 * Math.sqrt(cacheHitRate));
+  const s = computeSustainability(tokensSaved, tokensSpent);
 
   return {
     requests,
     promptsAvoided: hits,
     cacheHitRate: round(cacheHitRate, 4),
     tokensSaved,
-    energyKwh: round(energyKwh, 6),
-    waterL: round(waterL, 6),
-    co2g: round(co2g, 4),
+    tokensSpent,
+    energySavedKwh: s.energySavedKwh,
+    energySpentKwh: s.energySpentKwh,
+    waterSavedL: s.waterSavedL,
+    waterSpentL: s.waterSpentL,
+    co2SavedG: s.co2SavedG,
     ecoScore,
+    latest,
   };
+}
+
+export async function resetMetrics(): Promise<void> {
+  await redis.del(K.requests, K.hits, K.tokensSaved, K.tokensSpent, K.latest);
 }
 
 function round(n: number, dp: number): number {
   const f = 10 ** dp;
   return Math.round(n * f) / f;
-}
-
-// Reset all counters (used by the seed script's --reset / --flush flags).
-export async function resetMetrics(): Promise<void> {
-  await redis.del(KEYS.requests, KEYS.hits, KEYS.tokensSaved);
 }
