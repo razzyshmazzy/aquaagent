@@ -15,9 +15,18 @@
  */
 import { embed } from "ai";
 import { openai, vector, type CachedAnswer } from "../lib/clients";
-import { EMBED_MODEL } from "../lib/constants";
+import { EMBED_MODEL, DEFAULT_REPO } from "../lib/constants";
 import { estimateTokens } from "../lib/tokens";
 import { resetMetrics } from "../lib/metrics";
+
+// The gateway namespaces the shared cache per repo. Seed into the default repo
+// so both agents (which default to it) hit the seeded answers. Override with
+// `npm run seed -- --repo <id>`.
+function repoArg(): string {
+  const i = process.argv.indexOf("--repo");
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : DEFAULT_REPO;
+}
+const REPO = repoArg();
 
 // Pre-seeded informational Q&As. A paraphrase of any of these will HIT.
 const SEED: { prompt: string; answer: string; author: string }[] = [
@@ -62,8 +71,8 @@ function seedId(prompt: string): string {
 async function main() {
   const flush = process.argv.includes("--flush");
   if (flush) {
-    await vector.reset();
-    console.log("✓ vector index flushed");
+    await vector.namespace(REPO).reset();
+    console.log(`✓ vector namespace "${REPO}" flushed`);
   }
 
   const reset = flush || process.argv.includes("--reset");
@@ -84,7 +93,7 @@ async function main() {
       ts: Date.now(),
       answerTokens: estimateTokens(item.answer),
     };
-    await vector.upsert({
+    await vector.namespace(REPO).upsert({
       id: seedId(item.prompt),
       vector: embedding,
       metadata: record as unknown as Record<string, unknown>,
@@ -92,7 +101,7 @@ async function main() {
     console.log(`✓ seeded: "${item.prompt}"`);
   }
 
-  console.log(`\nDone — ${SEED.length} Q&As cached.`);
+  console.log(`\nDone — ${SEED.length} Q&As cached in namespace "${REPO}".`);
   console.log("Rehearsed demo pair (NOT seeded):");
   console.log(`  Alice -> ${DEMO_PROMPTS.alice}`);
   console.log(`  Bob   -> ${DEMO_PROMPTS.bob}`);
