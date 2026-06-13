@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# per-user agent config written by `npm run zenflow:setup`
+.claude/settings.local.json
+
 # vercel
 .vercel
 
