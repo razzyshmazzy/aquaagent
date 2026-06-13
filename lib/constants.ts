@@ -20,9 +20,11 @@ export const MAX_CACHEABLE_CHARS = 400;
 // The shared cache is namespaced per repo. Agents pass these as headers; the
 // default keeps the demo working as one shared namespace even without config.
 export const DEFAULT_REPO = "default";
-export const HEADER_REPO = "x-carbo-repo";
-export const HEADER_AUTHOR = "x-carbo-author";
-export const HEADER_CACHE = "x-carbo-cache"; // "on" | "off" override
+// Agents send the zenflow-prefixed headers; the carbo-prefixed names are kept
+// as a fallback for older configs. Checked in this order.
+export const HEADER_REPO = ["x-zenflow-repo", "x-carbo-repo"];
+export const HEADER_AUTHOR = ["x-zenflow-author", "x-carbo-author"];
+export const HEADER_CACHE = ["x-zenflow-cache", "x-carbo-cache"]; // "on" | "off"
 
 // --- Gateway: upstream model APIs ------------------------------------------
 export const ANTHROPIC_UPSTREAM = "https://api.anthropic.com/v1/messages";

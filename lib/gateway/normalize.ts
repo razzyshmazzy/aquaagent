@@ -53,14 +53,23 @@ function lastUserText(body: Record<string, unknown>): string {
   return "";
 }
 
+// First non-empty value among the candidate header names.
+function firstHeader(headers: Headers, names: string[]): string {
+  for (const name of names) {
+    const v = headers.get(name);
+    if (v && v.trim()) return v.trim();
+  }
+  return "";
+}
+
 export function normalize(
   provider: Provider,
   body: Record<string, unknown>,
   headers: Headers
 ): NormalizedRequest {
-  const repoId = (headers.get(HEADER_REPO) || DEFAULT_REPO).trim() || DEFAULT_REPO;
-  const author = (headers.get(HEADER_AUTHOR) || "anon").trim() || "anon";
-  const rawOverride = (headers.get(HEADER_CACHE) || "").trim().toLowerCase();
+  const repoId = firstHeader(headers, HEADER_REPO) || DEFAULT_REPO;
+  const author = firstHeader(headers, HEADER_AUTHOR) || "anon";
+  const rawOverride = firstHeader(headers, HEADER_CACHE).toLowerCase();
   const cacheOverride =
     rawOverride === "on" || rawOverride === "off" ? rawOverride : null;
 

@@ -22,4 +22,7 @@ export type CachedAnswer = {
   author: string;
   ts: number;
   answerTokens: number;
+  // Postgres interactions.id of the row that first cached this answer (set on
+  // the miss). A later hit uses it for interactions.matched_interaction_id.
+  interactionId?: string;
 };
