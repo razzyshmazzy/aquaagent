@@ -21,7 +21,7 @@ export async function recordUsage(e: UsageEvent): Promise<void> {
   } else {
     if (e.tokens > 0) p.incrby(K.tokensSpent, e.tokens);
   }
-  p.set(K.latest, JSON.stringify(e));
+  p.set(K.latest, e); // Upstash serializes objects; don't pre-stringify (it round-trips to "[object Object]")
   await p.exec();
 }
 
@@ -31,10 +31,10 @@ export async function getMetrics(): Promise<Metrics> {
     redis.get<number>(K.hits),
     redis.get<number>(K.tokensSaved),
     redis.get<number>(K.tokensSpent),
-    redis.get<string>(K.latest),
+    redis.get<UsageEvent>(K.latest), // Upstash auto-deserializes back to the object
   ]);
 
-  const latest = latestRaw ? (JSON.parse(latestRaw) as UsageEvent) : null;
+  const latest = latestRaw ?? null;
   return computeMetrics(
     requests ?? 0,
     hits ?? 0,

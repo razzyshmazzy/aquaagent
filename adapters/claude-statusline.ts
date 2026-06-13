@@ -51,7 +51,7 @@ function renderTick(payload: TickPayload): string {
   const waterL = kwh * WATER_L_PER_KWH;
 
   const waterStr = `${BLUE}💧${formatSmall(waterL, "L")}${RESET}`;
-  const energyStr = `${YELLOW}⚡${formatSmall(kwh, "Wh")}${RESET}`;  // show Wh, friendlier scale
+  const energyStr = `${YELLOW}⚡${formatSmall(kwh * 1000, "Wh")}${RESET}`;  // kWh -> Wh for a friendlier scale (matches codex-hook)
 
   const link = osc8(`${DIM}[carbo]${RESET}`, DASHBOARD_URL);
   return `${waterStr} ${energyStr} ${link}`;
