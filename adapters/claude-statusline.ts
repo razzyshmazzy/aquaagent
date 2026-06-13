@@ -1,73 +1,89 @@
 #!/usr/bin/env tsx
 // Claude Code statusline adapter — blue water, yellow electricity.
 //
-// Configure in .claude/settings.json:
-//   { "statusCommand": "npx tsx adapters/claude-statusline.ts" }
+// Configure in settings.json (~/.claude/settings.json or project .claude/):
+//   {
+//     "statusLine": {
+//       "type": "command",
+//       "command": "npx tsx /ABSOLUTE/PATH/TO/adapters/claude-statusline.ts"
+//     }
+//   }
 //
-// Claude Code runs this as a persistent process and pipes one JSON line to stdin
-// on every tick. Fields used (cumulative session totals):
-//   input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens
+// Claude Code runs the command once per update (after each assistant message,
+// /compact, etc.; debounced 300ms), piping one JSON blob on stdin and rendering
+// the script's stdout. We read the WHOLE blob, convert the latest response's
+// output tokens to water/energy, and print one line.
 //
-// For click-to-open-dashboard, wrap in an OSC 8 hyperlink (iTerm2/Kitty/WezTerm):
-//   ESC]8;;http://localhost:3000/dashboard\atext\ESC]8;;\a
+// Schema ref: https://code.claude.com/docs/en/statusline — token counts live
+// under `context_window.*`, NOT at the top level.
 
-import * as readline from "readline";
 import { tokensToKwh, WATER_L_PER_KWH } from "../lib/sustainability";
 
-const BLUE   = "\x1b[34m";
+const BLUE = "\x1b[34m";
 const YELLOW = "\x1b[33m";
-const DIM    = "\x1b[2m";
-const RESET  = "\x1b[0m";
+const DIM = "\x1b[2m";
+const RESET = "\x1b[0m";
 
 const DASHBOARD_URL = "http://localhost:3000/dashboard";
-// OSC 8 hyperlink — works in iTerm2, Kitty, WezTerm. Falls back to plain text elsewhere.
+// OSC 8 hyperlink — works in iTerm2, Kitty, WezTerm. Falls back to plain text.
 function osc8(text: string, url: string): string {
   return `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
 }
 
-type TickPayload = {
-  input_tokens?: number;
+type StatusInput = {
+  context_window?: {
+    total_output_tokens?: number;
+    total_input_tokens?: number;
+    current_usage?: { output_tokens?: number };
+  };
+  // legacy / fallback field names
   output_tokens?: number;
-  cache_read_input_tokens?: number;
-  cache_creation_input_tokens?: number;
-  cost_usd?: number;
   [k: string]: unknown;
 };
 
-let prevOutput = 0;
-
 function formatSmall(n: number, unit: string): string {
+  if (n <= 0) return `0${unit}`;
   if (n < 0.001) return `${(n * 1e6).toFixed(1)}µ${unit}`;
-  if (n < 1)     return `${(n * 1000).toFixed(2)}m${unit}`;
+  if (n < 1) return `${(n * 1000).toFixed(2)}m${unit}`;
   return `${n.toFixed(3)}${unit}`;
 }
 
-function renderTick(payload: TickPayload): string {
-  const outputNow = payload.output_tokens ?? 0;
-  const promptTokens = Math.max(0, outputNow - prevOutput);
-  prevOutput = outputNow;
+// Output tokens of the most recent API response (per-turn on Claude Code
+// >= 2.1.132; close enough for a live readout otherwise).
+function latestOutputTokens(p: StatusInput): number {
+  return (
+    p.context_window?.total_output_tokens ??
+    p.context_window?.current_usage?.output_tokens ??
+    p.output_tokens ??
+    0
+  );
+}
 
-  const kwh   = tokensToKwh(promptTokens);
+function render(input: StatusInput): string {
+  const tokens = latestOutputTokens(input);
+  const kwh = tokensToKwh(tokens);
   const waterL = kwh * WATER_L_PER_KWH;
 
   const waterStr = `${BLUE}💧${formatSmall(waterL, "L")}${RESET}`;
-  const energyStr = `${YELLOW}⚡${formatSmall(kwh * 1000, "Wh")}${RESET}`;  // kWh -> Wh for a friendlier scale (matches codex-hook)
-
+  const energyStr = `${YELLOW}⚡${formatSmall(kwh * 1000, "Wh")}${RESET}`; // kWh -> Wh
   const link = osc8(`${DIM}[carbo]${RESET}`, DASHBOARD_URL);
   return `${waterStr} ${energyStr} ${link}`;
 }
 
-const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+async function main() {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
 
-rl.on("line", (line) => {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-  try {
-    const payload = JSON.parse(trimmed) as TickPayload;
-    process.stdout.write(renderTick(payload) + "\n");
-  } catch {
-    // Silently skip malformed lines; Claude Code will show last good output.
+  let line = `${BLUE}💧0L${RESET} ${YELLOW}⚡0Wh${RESET}`;
+  if (raw) {
+    try {
+      line = render(JSON.parse(raw) as StatusInput);
+    } catch {
+      // Malformed input — keep the zero line rather than crashing the status bar.
+    }
   }
-});
+  process.stdout.write(line + "\n");
+}
 
-rl.on("close", () => process.exit(0));
+main();

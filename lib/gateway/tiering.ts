@@ -13,12 +13,14 @@ export function isCacheable(req: NormalizedRequest): boolean {
   if (req.cacheOverride === "off") return false;
 
   const text = req.promptText;
-  if (!text) return false;
-  if (text.length > MAX_CACHEABLE_CHARS) return false;
+  if (!text) return false; // tool-result turns carry no user text — bypass
+  if (text.length > MAX_CACHEABLE_CHARS) return false; // long = code/complex
   if (text.includes("```")) return false; // contains a code fence
 
-  // Requests carrying tools are agent/code workflows — bypass.
-  if (Array.isArray(req.body.tools) && req.body.tools.length > 0) return false;
-
+  // NOTE: we deliberately do NOT bypass purely because `tools` is present —
+  // real agents (Claude Code, Codex) attach their toolset to every request, so
+  // that would bypass everything. The text heuristics above (short, fence-free,
+  // non-empty user message) are what gate code vs. informational Q&A. Use the
+  // x-zenflow-cache header to force the decision per request.
   return true;
 }
