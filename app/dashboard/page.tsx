@@ -307,7 +307,6 @@ export default function Dashboard() {
       {/* ── Global keyframes ── */}
       <style>{`
         @keyframes aqBubble{0%{transform:translateY(0) scale(1);opacity:.14}100%{transform:translateY(-105vh) scale(1.4);opacity:0}}
-        @keyframes aqFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
         @keyframes aqPulse{0%,100%{opacity:.7}50%{opacity:1}}
         @keyframes liveDot{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}50%{box-shadow:0 0 0 5px rgba(52,211,153,0)}}
       `}</style>
@@ -383,7 +382,6 @@ export default function Dashboard() {
           gridColumn: "1 / 9", ...CARD,
           padding: "40px 52px",
           display: "flex", flexDirection: "column", justifyContent: "space-between",
-          animation: "aqFloat 9s ease-in-out infinite",
         }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
             <span style={{

@@ -77,3 +77,7 @@ Field names are the integration boundary — don't rename without telling the UI
 - `lib/constants.ts` — similarity threshold, models, sustainability constants (cited).
 - `lib/clients.ts` — Upstash Vector / Redis / OpenAI clients.
 - `scripts/seed.ts` — seed cache + rehearsed demo prompts.
+
+## License
+
+Open source under the [MIT License](LICENSE).
