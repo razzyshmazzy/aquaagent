@@ -194,9 +194,11 @@ export default function Dashboard() {
           <img
             src="/agentwithtext.png"
             alt="AquaAgent"
-            style={{ height: 50, width: "auto", display: "block", flexShrink: 0, transform: "scale(3.5)", transformOrigin: "left center" }}
+            width={175}
+            height={50}
+            style={{ height: 50, width: 175, display: "block", flexShrink: 0 }}
           />
-          <span style={{ color: "rgba(255,255,255,0.18)", fontSize: 18, marginLeft: 180 }}>·</span>
+          <span style={{ color: "rgba(255,255,255,0.18)", fontSize: 18 }}>·</span>
           <span style={{
             fontSize: 13, color: "rgba(255,255,255,0.42)",
             fontFamily: "var(--font-dm-mono, monospace)", letterSpacing: "0.09em",
