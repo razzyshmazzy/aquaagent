@@ -1,6 +1,6 @@
-# Carbo Gateway
+# AquaAgent Gateway
 
-Carbo is a **cross-agent model gateway**. Claude Code and Codex point their base
+AquaAgent is a **cross-agent model gateway**. Claude Code and Codex point their base
 URL at it. For short informational questions it serves a cached answer **in the
 caller's own wire format without calling the upstream model** — that avoided
 inference is the green claim. Code/agent traffic bypasses the cache and forwards
@@ -73,7 +73,7 @@ model = "gpt-4o-mini"
 model_provider = "carbo"
 
 [model_providers.carbo]
-name = "Carbo"
+name = "AquaAgent"
 base_url = "http://localhost:3000/v1"
 wire_api = "chat"
 env_key = "OPENAI_API_KEY"

@@ -76,7 +76,7 @@ function render(input: StatusInput): string {
 
   const waterStr = `${BLUE}💧${formatSmall(waterL, "L")}${RESET}`;
   const energyStr = `${YELLOW}⚡${formatSmall(kwh * 1000, "Wh")}${RESET}`; // kWh -> Wh
-  const link = osc8(`${DIM}[carbo]${RESET}`, DASHBOARD_URL);
+  const link = osc8(`${DIM}[AquaAgent]${RESET}`, DASHBOARD_URL);
   return `${waterStr} ${energyStr} ${link}`;
 }
 

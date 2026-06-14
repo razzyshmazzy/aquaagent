@@ -1,4 +1,4 @@
-# Carbo
+# AquaAgent
 
 A semantic answer cache that turns avoided LLM calls into a sustainability story.
 Ask a question; if a near-identical one was asked before, we serve the cached

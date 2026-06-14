@@ -119,7 +119,7 @@ This is the rehearsed demo pair: Alice MISS → Bob HIT → dashboard ticks up.
 
 ## 6. Copilot primer (paste this into a Copilot chat in the repo)
 
-> I'm working on the Carbo repo on the `metrics` branch. I own `lib/metrics.ts`,
+> I'm working on the AquaAgent repo on the `metrics` branch. I own `lib/metrics.ts`,
 > `app/api/metrics/route.ts`, and the dashboard UI. There's a frozen contract I
 > must NOT break: `recordUsage(e: UsageEvent): Promise<void>` and
 > `getMetrics(): Promise<Metrics>`, with `UsageEvent = { cacheHit, tokens, model,

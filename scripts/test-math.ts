@@ -26,6 +26,14 @@ check("tokensSpent",    m.tokensSpent,    9000, 0);
 console.log(`  ecoScore: ${m.ecoScore}  (sqrt(0.4167)*100 ≈ 65)`);
 console.log(`  latest:   ${m.latest}`);
 
+// Prompt shortening — saved input tokens fold into the saved (energy→water→CO₂) side
+const ss = computeSustainability(0, 9000, 1000);
+check("shortening waterSavedFromShorteningL", ss.waterSavedFromShorteningL, 0.0018, 0.0001);
+check("shortening folds into waterSavedL",    ss.waterSavedL,               0.0018, 0.0001);
+check("shortening leaves spent untouched",    ss.waterSpentL,               0.0162, 0.0001);
+const ms = computeMetrics(10, 0, 0, 9000, null, 1000);
+check("metrics promptTokensSaved",            ms.promptTokensSaved,         1000,   0);
+
 // Zero-request edge case — must not divide by zero
 const z = computeMetrics(0, 0, 0, 0, null);
 check("zero cacheHitRate", z.cacheHitRate, 0, 0);

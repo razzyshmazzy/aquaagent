@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { normalize, type Provider } from "./normalize";
 import { isCacheable } from "./tiering";
+import { shortenPrompt, promptTokensSaved as estPromptTokensSaved, withShortenedPrompt } from "./shorten";
 import { lookup, store } from "./cache";
 import { recordUsage } from "@/lib/metrics";
 import { estimateTokens } from "@/lib/tokens";
@@ -76,14 +77,21 @@ export async function handle(provider: Provider, req: Request): Promise<Response
       return p.synthesize(hit.answer.answer, norm.model, norm.stream);
     }
 
-    // MISS — forward upstream (non-streaming), record, cache, then respond.
-    const { text, answerTokens } = await p.forward(norm.body, req.headers);
+    // MISS — compact the prompt, forward the shorter version upstream, then
+    // record, cache, and respond. The removed input tokens never reach the model.
+    const shortened = shortenPrompt(norm.promptText);
+    const promptTokensSaved = estPromptTokensSaved(norm.promptText, shortened);
+    const forwardBody =
+      promptTokensSaved > 0 ? withShortenedPrompt(norm.body, shortened) : norm.body;
+
+    const { text, answerTokens } = await p.forward(forwardBody, req.headers);
     await recordUsage({
       cacheHit: false,
       tokens: answerTokens,
       model: norm.model || CHAT_MODEL,
       author: norm.author,
       ts: Date.now(),
+      promptTokensSaved,
     });
     // This row's id is stamped into the vector metadata so a future hit can
     // point matched_interaction_id back at it.
@@ -106,6 +114,7 @@ export async function handle(provider: Provider, req: Request): Promise<Response
       model: norm.model || CHAT_MODEL,
       cacheHit: false,
       tokens: answerTokens,
+      promptTokensSaved,
       matchedInteractionId: null,
     });
     return p.synthesize(text, norm.model, norm.stream);

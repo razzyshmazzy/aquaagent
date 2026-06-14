@@ -61,7 +61,7 @@ async function main() {
   const co2G   = kwh * CO2_G_PER_KWH;
 
   const parts = [
-    `${DIM}carbo${RESET}`,
+    `${DIM}AquaAgent${RESET}`,
     `${BLUE}💧 ${formatSmall(waterL, "L")} water${RESET}`,
     `${YELLOW}⚡ ${formatSmall(kwh * 1000, "Wh")} energy${RESET}`,
     `${GREEN}🌿 ${formatSmall(co2G, "gCO₂")}${RESET}`,

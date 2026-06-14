@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * zenflow:setup — point this developer's agents at the ZenFlow/Carbo gateway,
+ * zenflow:setup — point this developer's agents at the ZenFlow/AquaAgent gateway,
  * attributed to *them*. Run once per clone:
  *
  *   npm run zenflow:setup                       # gateway = http://localhost:3000
@@ -97,7 +97,7 @@ console.log("For Codex, add this to ~/.codex/config.toml (user-level) and restar
 console.log(`  model_provider = "carbo"
 
   [model_providers.carbo]
-  name = "Carbo"
+  name = "AquaAgent"
   base_url = "${url}/v1"
   wire_api = "chat"
   env_key = "OPENAI_API_KEY"

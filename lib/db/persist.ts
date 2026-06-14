@@ -17,6 +17,8 @@ export type PersistInput = {
   model: string;
   cacheHit: boolean;
   tokens: number;
+  // Estimated input tokens removed by prompt shortening (forwarded misses only).
+  promptTokensSaved?: number;
   matchedInteractionId: string | null;
 };
 
@@ -31,7 +33,9 @@ export async function persistInteraction(input: PersistInput): Promise<void> {
 
   const s = input.cacheHit
     ? computeSustainability(input.tokens, 0) // hit: full savings
-    : computeSustainability(0, input.tokens); // miss: zero saved
+    // miss: no cache savings, but shortening the forwarded prompt still saves
+    // input tokens — folded in so the dashboard's DB-driven graph/weekly include it.
+    : computeSustainability(0, input.tokens, input.promptTokensSaved ?? 0);
 
   await db
     .insert(users)

@@ -1,4 +1,4 @@
-// Carbo — tunable constants. Keep these labeled and swappable (per NICO.md #3).
+// AquaAgent — tunable constants. Keep these labeled and swappable (per NICO.md #3).
 
 // --- Cache behavior ---------------------------------------------------------
 // Cosine similarity required to serve a cached answer. Cosine sim from Upstash

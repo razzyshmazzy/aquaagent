@@ -9,6 +9,7 @@ const K = {
   hits: "carbo:hits",
   tokensSaved: "carbo:tokensSaved",
   tokensSpent: "carbo:tokensSpent",
+  promptTokensSaved: "carbo:promptTokensSaved",
   latest: "carbo:latest",
 } as const;
 
@@ -21,18 +22,25 @@ export async function recordUsage(e: UsageEvent): Promise<void> {
   } else {
     if (e.tokens > 0) p.incrby(K.tokensSpent, e.tokens);
   }
+  // Prompt-shortening savings accrue on forwarded (miss) requests, independent
+  // of the hit/miss token split above.
+  if (e.promptTokensSaved && e.promptTokensSaved > 0) {
+    p.incrby(K.promptTokensSaved, e.promptTokensSaved);
+  }
   p.set(K.latest, e); // Upstash serializes objects; don't pre-stringify (it round-trips to "[object Object]")
   await p.exec();
 }
 
 export async function getMetrics(): Promise<Metrics> {
-  const [requests, hits, tokensSaved, tokensSpent, latestRaw] = await Promise.all([
-    redis.get<number>(K.requests),
-    redis.get<number>(K.hits),
-    redis.get<number>(K.tokensSaved),
-    redis.get<number>(K.tokensSpent),
-    redis.get<UsageEvent>(K.latest), // Upstash auto-deserializes back to the object
-  ]);
+  const [requests, hits, tokensSaved, tokensSpent, promptTokensSaved, latestRaw] =
+    await Promise.all([
+      redis.get<number>(K.requests),
+      redis.get<number>(K.hits),
+      redis.get<number>(K.tokensSaved),
+      redis.get<number>(K.tokensSpent),
+      redis.get<number>(K.promptTokensSaved),
+      redis.get<UsageEvent>(K.latest), // Upstash auto-deserializes back to the object
+    ]);
 
   const latest = latestRaw ?? null;
   return computeMetrics(
@@ -40,10 +48,18 @@ export async function getMetrics(): Promise<Metrics> {
     hits ?? 0,
     tokensSaved ?? 0,
     tokensSpent ?? 0,
-    latest
+    latest,
+    promptTokensSaved ?? 0
   );
 }
 
 export async function resetMetrics(): Promise<void> {
-  await redis.del(K.requests, K.hits, K.tokensSaved, K.tokensSpent, K.latest);
+  await redis.del(
+    K.requests,
+    K.hits,
+    K.tokensSaved,
+    K.tokensSpent,
+    K.promptTokensSaved,
+    K.latest
+  );
 }
